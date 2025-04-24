@@ -8,6 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 import seaborn as sns
 import joblib
+from sklearn.impute import KNNImputer
 
 # 1. Đọc dữ liệu từ file CSV với định dạng đúng
 print("Đang đọc dữ liệu từ file AirQualityUCI.csv...")
@@ -17,6 +18,10 @@ data = pd.read_csv('AirQualityUCI.csv', sep=';')
 # 2. Xử lý dữ liệu ban đầu
 # Replace -200 values with NaN as they likely represent missing values
 data = data.replace(-200, np.nan)
+# Loại bỏ các cột không có bất kỳ giá trị nào (tất cả là NaN hoặc bị lỗi đọc)
+data = data.dropna(axis=1, how='all')
+data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
+
 
 # Convert comma to dot in numeric columns (European format issue)
 for col in data.columns:
@@ -108,13 +113,36 @@ if y.isna().sum() > 0:
 
 # Handle remaining NaN values in features using imputation
 if X.isna().sum().sum() > 0:
-    print("Sử dụng SimpleImputer để xử lý các giá trị NaN trong đặc trưng")
-    imputer = SimpleImputer(strategy='mean')
+    print("Sử dụng KNNImputer để xử lý các giá trị thiếu...")
+    imputer = KNNImputer(n_neighbors=5)
     X_imputed = imputer.fit_transform(X)
     X = pd.DataFrame(X_imputed, columns=X.columns, index=X.index)
 
+
 print(f"\nSố lượng đặc trưng sử dụng: {X.shape[1]}")
 print(f"Các đặc trưng: {X.columns.tolist()}")
+
+print("Tạo các đặc trưng tương tác và bậc hai...")
+
+# Thêm đặc trưng bậc hai (polynomial) và tương tác đơn giản
+X['PT08.S1_CO*NOx(GT)'] = X['PT08.S1(CO)'] * X['NOx(GT)']
+X['PT08.S5_O3**2'] = X['PT08.S5(O3)'] ** 2
+X['NO2_GT*RH'] = X['NO2(GT)'] * X['RH']
+
+
+# 4. Loại bỏ outlier bằng IQR
+def remove_outliers_iqr(df, target, multiplier=1.5):
+    combined = pd.concat([df, target], axis=1)
+    for col in combined.columns:
+        Q1 = combined[col].quantile(0.25)
+        Q3 = combined[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - multiplier * IQR
+        upper_bound = Q3 + multiplier * IQR
+        combined = combined[(combined[col] >= lower_bound) & (combined[col] <= upper_bound)]
+    return combined.drop(columns=[target_column]), combined[target_column]
+
+X, y = remove_outliers_iqr(X, y)
 
 # 6. Chia dữ liệu thành tập huấn luyện và kiểm thử
 print("\nChia dữ liệu thành tập huấn luyện và kiểm thử (80% - 20%)...")
@@ -129,9 +157,10 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # 7. Xây dựng mô hình Linear Regression
-print("\nXây dựng mô hình Linear Regression...")
-model = LinearRegression()
+print("\nHuấn luyện mô hình Linear Regression với ràng buộc không âm...")
+model = LinearRegression(positive=True)
 model.fit(X_train_scaled, y_train)
+
 
 # In ra hệ số của mô hình
 print("\nHệ số (coefficients) của mô hình:")
