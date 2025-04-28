@@ -65,9 +65,15 @@ if 'CO(GT)' in correlation_matrix.index:
 # Nếu có cột Date và Time, chuyển đổi thành datetime
 if 'Date' in data.columns and 'Time' in data.columns:
     print("\nChuyển đổi cột Date và Time thành DateTime...")
-    # Handle potential formatting issues
     try:
-        data['DateTime'] = pd.to_datetime(data['Date'] + ' ' + data['Time'])
+        # Kiểm tra định dạng của các cột Date và Time
+        print("Mẫu giá trị Date:", data['Date'].iloc[0])
+        print("Mẫu giá trị Time:", data['Time'].iloc[0])
+        
+        # Chỉ định format cụ thể (điều chỉnh theo định dạng thực tế của dữ liệu)
+        data['DateTime'] = pd.to_datetime(data['Date'] + ' ' + data['Time'], 
+                                          format='%d/%m/%Y %H.%M.%S')
+        
         # Tạo các đặc trưng thời gian
         data['Hour'] = data['DateTime'].dt.hour
         data['Day'] = data['DateTime'].dt.day
@@ -76,9 +82,10 @@ if 'Date' in data.columns and 'Time' in data.columns:
         
         # Loại bỏ các cột không cần thiết
         columns_to_drop = ['Date', 'Time', 'DateTime']
-    except:
-        print("Không thể chuyển đổi Date và Time thành DateTime. Bỏ qua bước này.")
-        columns_to_drop = []
+        print("Chuyển đổi DateTime thành công!")
+    except Exception as e:
+        print(f"Không thể chuyển đổi Date và Time thành DateTime. Lỗi: {e}")
+        columns_to_drop = ['Date', 'Time']
 else:
     columns_to_drop = []
 
